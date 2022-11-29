@@ -15,6 +15,3 @@ You can find your API access url and key in your ActiveCampaign account: Setting
 ```csharp
 var contactData = await ac.AddContact( "example@example.com", <optional cancellation token> );
 ```
-
-# Important
-You should not use more than one client at the same time. The reason is that there are timed access restrictions imposed by ActiveCampaign, and they are taken into account within just one client.
