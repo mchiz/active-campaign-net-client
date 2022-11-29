@@ -71,19 +71,19 @@ namespace ActiveCampaign {
             return tdr.tags[ 0 ];
         }
 
-        public async Task< ContactData[ ] > GetContactsByTagId( int tagId ) {
-            return await GetContactsByTagId( tagId, null, null );
+        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, ContactStatus status ) {
+            return await GetContactsByTagId( tagId, status, null, null );
         }
 
-        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, DateRange? dateRange ) {
-            return await GetContactsByTagId( tagId, dateRange, null );
+        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, ContactStatus status, DateRange? dateRange ) {
+            return await GetContactsByTagId( tagId, status, dateRange, null );
         }
 
-        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, CancellationToken? cancellationToken ) {
-            return await GetContactsByTagId( tagId, null, cancellationToken );
+        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, ContactStatus status, CancellationToken? cancellationToken ) {
+            return await GetContactsByTagId( tagId, status, null, cancellationToken );
         }
 
-        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, DateRange? dateRange, CancellationToken? cancellationToken ) {
+        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, ContactStatus status, DateRange? dateRange, CancellationToken? cancellationToken ) {
             const int limit = 100;
 
             string dateFilter = "";
@@ -106,7 +106,7 @@ namespace ActiveCampaign {
                 string query = _url + "/contacts" + $"?limit={limit}&offset={offset}" + dateFilter;
             
                 query += $"&tagid={tagId}";
-                query += $"&status={( int )ContactStatus.Active}";
+                query += $"&status={( int )status}";
 
                 await Wait( );
 
