@@ -1,43 +1,8 @@
 ﻿using Newtonsoft.Json;
+using System.Threading;
 
 namespace ActiveCampaign {
     public class Client : IDisposable {
-        public enum ContactStatus {
-            Any = -1,
-            Unconfirmed = 0,
-            Active = 1,
-            Unsubscribed = 2,
-            Bounced = 3,
-        }
-
-        public struct ContactData {
-            [ JsonProperty( "email" ) ] public string Email;
-            [ JsonProperty( "id" ) ]    public int Id;
-        }
-
-        public struct TagData {
-            [ JsonProperty( "tagType" ) ]          public string TagType;
-            [ JsonProperty( "description" ) ]      public string Description;
-            [ JsonProperty( "id" ) ]               public int Id;
-            [ JsonProperty( "subscriber_count" ) ] public int SubscriberCount;
-        }
-
-        public struct DateRange {
-            public DateRange( DateTime start, DateTime end ) {
-                if( start > end )
-                    throw new ArgumentException( "The start date cannot be set after end date", "start" );
-
-                _start = start;
-                _end = end;
-            }
-            
-            public DateTime Start { get => _start; }
-            public DateTime End { get => _end; }
-
-            DateTime _start;
-            DateTime _end;
-        }
-
         public Client( string url, string key ) {
             _url = url + "/api/3";
 
@@ -55,12 +20,8 @@ namespace ActiveCampaign {
         public async Task< TagData? > GetTagId( string tagName, CancellationToken? cancellationToken ) {
             string query = _url + "/tags?search=" + Uri.EscapeDataString( tagName );
 
-            await Wait( );
-
-            using var result = cancellationToken.HasValue ?
-                await _httpClient.GetAsync( query, cancellationToken.Value ) :
-                await _httpClient.GetAsync( query );
-
+            using var result = await DoGetAsync( query, cancellationToken );
+            
             string jsonData = await result.Content.ReadAsStringAsync( );
 
             var tdr = JsonConvert.DeserializeObject< TagsDataRespone >( jsonData );
@@ -108,12 +69,8 @@ namespace ActiveCampaign {
                 query += $"&tagid={tagId}";
                 query += $"&status={( int )status}";
 
-                await Wait( );
-
-                using var result = cancellationToken.HasValue ?
-                    await _httpClient.GetAsync( query, cancellationToken.Value ) :
-                    await _httpClient.GetAsync( query );
-
+                using var result = await DoGetAsync( query, cancellationToken );
+            
                 string jsonData = await result.Content.ReadAsStringAsync( );
 
                 var cdr = JsonConvert.DeserializeObject< ContactDataResponse >( jsonData );
@@ -136,16 +93,10 @@ namespace ActiveCampaign {
                 email = emailAddress,
             };
 
-            var json = "{ \"contact\": " + JsonConvert.SerializeObject( contact ) + "}";
-            using var content = new StringContent( json );
-
-            await Wait( );
-
             string query = _url + "/contacts";
+            string content = "{ \"contact\": " + JsonConvert.SerializeObject( contact ) + "}";
 
-            using var result = cancellationToken.HasValue ?
-                await _httpClient.PostAsync( query, content, cancellationToken.Value ) :
-                await _httpClient.PostAsync( query, content );
+            using var result = await DoPostAsync( query, content, cancellationToken );
 
             if( !result.IsSuccessStatusCode )
                 throw new Exception( $"Error creating a new contact with email address '{emailAddress}'. Reason: {result.ReasonPhrase}" );
@@ -160,12 +111,8 @@ namespace ActiveCampaign {
         public async Task< ContactData? > SearchContactByEmailAddress( string emailAddress, CancellationToken? cancellationToken ) {
             string query = _url + "/contacts?email=" + Uri.EscapeDataString( emailAddress );
 
-            await Wait( );
-
-            using var result = cancellationToken.HasValue ?
-                await _httpClient.GetAsync( query, cancellationToken.Value ) :
-                await _httpClient.GetAsync( query );
-
+            using var result = await DoGetAsync( query, cancellationToken );
+            
             string jsonData = await result.Content.ReadAsStringAsync( );
 
             var cdr = JsonConvert.DeserializeObject< ContactDataResponse >( jsonData );
@@ -189,30 +136,72 @@ namespace ActiveCampaign {
                 tag = tagId,
             };
 
-            var json = "{ \"contactTag\": " + JsonConvert.SerializeObject( contactTag ) + "}";
-            using var content = new StringContent( json );
-
-            await Wait( );
-
             string query = _url + "/contactTags";
+            string content = "{ \"contactTag\": " + JsonConvert.SerializeObject( contactTag ) + "}";
 
-            using var result = cancellationToken.HasValue ?
-                await _httpClient.PostAsync( query, content, cancellationToken.Value ) :
-                await _httpClient.PostAsync( query, content );
+            using var result = await DoPostAsync( query, content, cancellationToken );
 
             if( !result.IsSuccessStatusCode )
                 throw new Exception( $"Error adding tag '{tagId}' to contact '{id}'. Reason: {result.ReasonPhrase}" );
         }
 
-        async Task Wait( ) {
+        async Task< HttpResponseMessage > DoGetAsync( string query, CancellationToken? cancellationToken ) {
+            try {
+                await _semaphore.WaitAsync( );
+
+                await WaitForActiveCampaignAccess( cancellationToken );
+
+                var result = cancellationToken.HasValue ?
+                    await _httpClient.GetAsync( query, cancellationToken.Value ) :
+                    await _httpClient.GetAsync( query );
+
+                _lastAccessTimeStamp = System.DateTime.Now;
+
+                return result;
+
+            } finally {
+                _semaphore.Release( );
+
+            }
+        }
+
+        async Task< HttpResponseMessage > DoPostAsync( string query, string content, CancellationToken? cancellationToken ) {
+            try {
+                await _semaphore.WaitAsync( );
+
+                await WaitForActiveCampaignAccess( cancellationToken );
+
+                using var c = new StringContent( content );
+
+                using var result = cancellationToken.HasValue ?
+                    await _httpClient.PostAsync( query, c, cancellationToken.Value ) :
+                    await _httpClient.PostAsync( query, c );
+
+                _lastAccessTimeStamp = System.DateTime.Now;
+
+                return result;
+
+            } finally {
+                _semaphore.Release( );
+
+            }
+
+        }
+
+        async Task WaitForActiveCampaignAccess( CancellationToken? cancellationToken ) {
             var diff = System.DateTime.Now - _lastAccessTimeStamp;
 
             if( diff.TotalMilliseconds < _delayBetweenQueries ) {
                 int remaining = _delayBetweenQueries - ( int )diff.TotalMilliseconds;
-                await Task.Delay( remaining );
-            }
+                
+                if( cancellationToken.HasValue ) {
+                    await Task.Delay( remaining, cancellationToken.Value );
 
-            _lastAccessTimeStamp = System.DateTime.Now;
+                } else {
+                    await Task.Delay( remaining );
+
+                }
+            }
         }
 
         struct AddContactResponse {
@@ -236,9 +225,11 @@ namespace ActiveCampaign {
         // We have to wait 250 ms between each call
         const int _delayBetweenQueries = 251;
 
-        System.DateTime _lastAccessTimeStamp;
         HttpClient _httpClient = new HttpClient( );
 
         string _url;
+
+        static System.DateTime _lastAccessTimeStamp;
+        static SemaphoreSlim _semaphore = new SemaphoreSlim( 1 );
     }
 }
