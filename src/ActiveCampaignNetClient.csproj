@@ -8,12 +8,13 @@
     <PackageTags>activecampaign;</PackageTags>
     <Title>ActiveCampaign client for C#</Title>
     <PackageId>activecampaign-net-client</PackageId>
-    <PackageVersion>1.0.2</PackageVersion>
+    <PackageVersion>1.0.3</PackageVersion>
     <Description>A very simple to use ActiveCampaign API client.</Description>
     <Copyright>Carlos Campaña</Copyright>
-    <PackageProjectUrl></PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/mchiz/active-campaign-net-client</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/mchiz/active-campaign-net-client</RepositoryUrl>
+    <Authors>Carlos Campaña Molinero</Authors>
   </PropertyGroup>
 
   <ItemGroup>
