@@ -8,6 +8,7 @@
     <PackageTags>activecampaign;</PackageTags>
     <Title>ActiveCampaign client for C#</Title>
     <PackageId>activecampaign-net-client</PackageId>
+    <PackageVersion>1.0.1</PackageVersion>
   </PropertyGroup>
 
   <ItemGroup>
