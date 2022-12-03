@@ -1,6 +1,8 @@
 # ActiveCampaign .Net Client (C#)
 The purpose of ActiveCampaign .Net Client is to interact with ActiveCampaign API V3 without having to know the in and outs of it.
 
+It is thread-safe and you can use multiple clients at the same but. But beware! ActiveCampaign does not allow to do more than one query every 250 milliseconds. This library takes that into account, and if you use multiple clients/threads it will still respect this time access limitation and function properly, so your program might not run as fast as you may expect due to this.
+
 ## How to use
 
 ### Initialization
@@ -15,6 +17,3 @@ You can find your API access url and key in your ActiveCampaign account: Setting
 ```csharp
 var contactData = await ac.AddContact( "example@example.com", <optional cancellation token> );
 ```
-
-# Important
-You should not use more than one client at the same time. The reason is that there are timed access restrictions imposed by ActiveCampaign, and they are taken into account within just one client.
