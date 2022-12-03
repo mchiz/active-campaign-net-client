@@ -173,7 +173,7 @@ namespace ActiveCampaign {
 
                 using var c = new StringContent( content );
 
-                using var result = cancellationToken.HasValue ?
+                var result = cancellationToken.HasValue ?
                     await _httpClient.PostAsync( query, c, cancellationToken.Value ) :
                     await _httpClient.PostAsync( query, c );
 
