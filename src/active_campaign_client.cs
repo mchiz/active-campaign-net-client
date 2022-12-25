@@ -1,5 +1,8 @@
-﻿using Newtonsoft.Json;
+﻿using ActiveCampaignNetClient;
+using Newtonsoft.Json;
+using System.Net.Mail;
 using System.Threading;
+using System.Xml.XPath;
 
 namespace ActiveCampaign {
     public class Client : IDisposable {
@@ -13,18 +16,14 @@ namespace ActiveCampaign {
             _httpClient.Dispose( );
         }
 
-        public async Task< TagData? > GetTagId( string tagName ) {
-            return await GetTagId( tagName, null );
-        }
-
-        public async Task< TagData? > GetTagId( string tagName, CancellationToken? cancellationToken ) {
+        public async Task< TagData? > GetTagId( string tagName, CancellationToken cancellationToken = default ) {
             string query = _url + "/tags?search=" + Uri.EscapeDataString( tagName );
 
             using var result = await DoGetAsync( query, cancellationToken );
             
             string jsonData = await result.Content.ReadAsStringAsync( );
 
-            var tdr = JsonConvert.DeserializeObject< TagsDataRespone >( jsonData );
+            var tdr = JsonConvert.DeserializeObject< TagsDataResponse >( jsonData );
 
             if( tdr.meta.total == 0 )
                 return null;
@@ -32,19 +31,11 @@ namespace ActiveCampaign {
             return tdr.tags[ 0 ];
         }
 
-        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, ContactStatus status ) {
-            return await GetContactsByTagId( tagId, status, null, null );
-        }
-
-        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, ContactStatus status, DateRange? dateRange ) {
-            return await GetContactsByTagId( tagId, status, dateRange, null );
-        }
-
-        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, ContactStatus status, CancellationToken? cancellationToken ) {
+        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, ContactStatus status, CancellationToken cancellationToken = default ) {
             return await GetContactsByTagId( tagId, status, null, cancellationToken );
         }
 
-        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, ContactStatus status, DateRange? dateRange, CancellationToken? cancellationToken ) {
+        public async Task< ContactData[ ] > GetContactsByTagId( int tagId, ContactStatus status, DateRange? dateRange, CancellationToken cancellationToken = default ) {
             const int limit = 100;
 
             string dateFilter = "";
@@ -88,7 +79,7 @@ namespace ActiveCampaign {
             return o.ToArray( );
         }
 
-        public async Task< ContactData > AddContact( string emailAddress, CancellationToken? cancellationToken ) {
+        public async Task< ContactData > AddContact( string emailAddress, CancellationToken cancellationToken = default ) {
             var contact = new {
                 email = emailAddress,
             };
@@ -99,7 +90,7 @@ namespace ActiveCampaign {
             using var result = await DoPostAsync( query, content, cancellationToken );
 
             if( !result.IsSuccessStatusCode )
-                throw new Exception( $"Error creating a new contact with email address '{emailAddress}'. Reason: {result.ReasonPhrase}" );
+                throw new AddContactException( emailAddress, result.StatusCode, result.ReasonPhrase ?? "" );
 
             string jsonData = await result.Content.ReadAsStringAsync( );
 
@@ -108,29 +99,22 @@ namespace ActiveCampaign {
             return acr.contact;
         }
 
-        public async Task< ContactData? > SearchContactByEmailAddress( string emailAddress, CancellationToken? cancellationToken ) {
+        public async Task< ContactData[ ] > SearchContactByEmailAddress( string emailAddress, CancellationToken cancellationToken = default ) {
             string query = _url + "/contacts?email=" + Uri.EscapeDataString( emailAddress );
 
             using var result = await DoGetAsync( query, cancellationToken );
             
+            if( !result.IsSuccessStatusCode )
+                throw new SearchContactByEmailAddressException( emailAddress, result.StatusCode, result.ReasonPhrase ?? "" );
+
             string jsonData = await result.Content.ReadAsStringAsync( );
 
             var cdr = JsonConvert.DeserializeObject< ContactDataResponse >( jsonData );
 
-            if( cdr.contacts.Length == 0 )
-                return null;
-
-            if( cdr.contacts.Length > 1 )
-                throw new Exception( $"More than one result has been found searching for a contact with email address '{emailAddress}'. Received data: {jsonData}" );
-
-            return cdr.contacts[ 0 ];
+            return cdr.contacts;
         }
 
-        public async Task< bool > AddTagToContact( int id, int tagId ) {
-            return await AddTagToContact( id, tagId );
-        }
-
-        public async Task AddTagToContact( int id, int tagId, CancellationToken? cancellationToken ) {
+        public async Task AddTagToContact( int id, int tagId, CancellationToken cancellationToken = default ) {
             var contactTag = new {
                 contact = id,
                 tag = tagId,
@@ -142,18 +126,50 @@ namespace ActiveCampaign {
             using var result = await DoPostAsync( query, content, cancellationToken );
 
             if( !result.IsSuccessStatusCode )
-                throw new Exception( $"Error adding tag '{tagId}' to contact '{id}'. Reason: {result.ReasonPhrase}" );
+                throw new AddTagToContactException( id, tagId, result.StatusCode, result.ReasonPhrase ?? "" );
         }
 
-        async Task< HttpResponseMessage > DoGetAsync( string query, CancellationToken? cancellationToken ) {
+        public async Task< bool > RemoveTagFromContact( int id, int tagId, CancellationToken cancellationToken = default ) {
+            var contactTag = new {
+                contact = id,
+                tag = tagId,
+            };
+
+            string getTagAssociationIdQuery = _url + $"/contacts/{id}/contactTags";
+
+            using var listResult = await DoGetAsync( getTagAssociationIdQuery, cancellationToken );
+
+            if( !listResult.IsSuccessStatusCode )
+                throw new ListTagAssociationException( id, listResult.StatusCode, listResult.ReasonPhrase ?? "" );
+
+            var jsonData = await listResult.Content.ReadAsStringAsync( );
+
+            var gctdr = JsonConvert.DeserializeObject< GetContactTagsDataResponse >( jsonData );
+
+            int index = Array.FindIndex( gctdr.contactTags, p => p.tag == tagId );
+
+            if( index == -1 )
+                return false;
+
+            var ta = gctdr.contactTags[ index ];
+
+            string removeTagAssociationQuery = _url + $"/contactTags/{ta.id}";
+
+            using var removeResult = await DoDeleteAsync( removeTagAssociationQuery, cancellationToken );
+
+            if( !removeResult.IsSuccessStatusCode )
+                throw new RemoveTagAssociationFromContactException( id, tagId, ta.id, removeResult.StatusCode, removeResult.ReasonPhrase ?? "" );
+
+            return true;
+        }
+
+        async Task< HttpResponseMessage > DoGetAsync( string query, CancellationToken cancellationToken = default ) {
             try {
                 await _semaphore.WaitAsync( );
 
                 await WaitForActiveCampaignAccess( cancellationToken );
 
-                var result = cancellationToken.HasValue ?
-                    await _httpClient.GetAsync( query, cancellationToken.Value ) :
-                    await _httpClient.GetAsync( query );
+                var result = await _httpClient.GetAsync( query, cancellationToken );
 
                 _lastAccessTimeStamp = System.DateTime.Now;
 
@@ -165,7 +181,7 @@ namespace ActiveCampaign {
             }
         }
 
-        async Task< HttpResponseMessage > DoPostAsync( string query, string content, CancellationToken? cancellationToken ) {
+        async Task< HttpResponseMessage > DoPostAsync( string query, string content, CancellationToken cancellationToken = default ) {
             try {
                 await _semaphore.WaitAsync( );
 
@@ -173,9 +189,7 @@ namespace ActiveCampaign {
 
                 using var c = new StringContent( content );
 
-                var result = cancellationToken.HasValue ?
-                    await _httpClient.PostAsync( query, c, cancellationToken.Value ) :
-                    await _httpClient.PostAsync( query, c );
+                var result = await _httpClient.PostAsync( query, c, cancellationToken );
 
                 _lastAccessTimeStamp = System.DateTime.Now;
 
@@ -188,19 +202,32 @@ namespace ActiveCampaign {
 
         }
 
-        async Task WaitForActiveCampaignAccess( CancellationToken? cancellationToken ) {
+        async Task< HttpResponseMessage > DoDeleteAsync( string query, CancellationToken cancellationToken = default ) {
+            try {
+                await _semaphore.WaitAsync( );
+
+                await WaitForActiveCampaignAccess( cancellationToken );
+
+                var result = await _httpClient.DeleteAsync( query,cancellationToken );
+
+                _lastAccessTimeStamp = System.DateTime.Now;
+
+                return result;
+
+            } finally {
+                _semaphore.Release( );
+
+            }
+
+        }
+
+        async Task WaitForActiveCampaignAccess( CancellationToken cancellationToken ) {
             var diff = System.DateTime.Now - _lastAccessTimeStamp;
 
             if( diff.TotalMilliseconds < _delayBetweenQueries ) {
                 int remaining = _delayBetweenQueries - ( int )diff.TotalMilliseconds;
                 
-                if( cancellationToken.HasValue ) {
-                    await Task.Delay( remaining, cancellationToken.Value );
-
-                } else {
-                    await Task.Delay( remaining );
-
-                }
+                await Task.Delay( remaining, cancellationToken );
             }
         }
 
@@ -213,13 +240,23 @@ namespace ActiveCampaign {
             public ContactData [ ]contacts;
         }
 
-        struct TagsDataRespone {
+        struct TagsDataResponse {
             public struct Meta {
                 public int total;
             }
 
             public TagData [ ]tags;
             public Meta meta;
+        }
+
+        struct GetContactTagsDataResponse {
+            public struct TagAssociationData {
+                public int contact;
+                public int tag;
+                public int id;
+            }
+
+            public TagAssociationData [ ]contactTags;
         }
 
         // We have to wait 250 ms between each call
