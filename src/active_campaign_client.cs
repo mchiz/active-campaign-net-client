@@ -259,8 +259,9 @@ namespace ActiveCampaign {
             public TagAssociationData [ ]contactTags;
         }
 
-        // We have to wait 250 ms between each call
-        const int _delayBetweenQueries = 251;
+        // ActiveCampaign imposes a limit of 5 requests per second
+        // This is expressed in milliseconds
+        const int _delayBetweenQueries = 1000 / 5 + 1;
 
         HttpClient _httpClient = new HttpClient( );
 
