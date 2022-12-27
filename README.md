@@ -1,7 +1,7 @@
 # ActiveCampaign .Net Client (C#)
 The purpose of ActiveCampaign .Net Client is to interact with ActiveCampaign API V3 without having to know the in and outs of it.
 
-It is thread-safe and you can use multiple clients at the same but. But beware! ActiveCampaign does not allow to do more than one query every 250 milliseconds. This library takes that into account, and if you use multiple clients/threads it will still respect this time access limitation and function properly, so your program might not run as fast as you may expect due to this.
+It is thread-safe and you can use multiple clients at the same time. But beware! ActiveCampaign does not allow to do more than 5 requests per second. This library takes that into account, and if you use multiple clients/threads it will still respect this time access limitation and function properly, so your program might not run as fast as you may expect due to this.
 
 ## How to use
 
