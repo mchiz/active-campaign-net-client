@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace ActiveCampaignNetClient {
+﻿namespace ActiveCampaign {
     public class ListTagAssociationException : Exception {
         public ListTagAssociationException( int contactId, System.Net.HttpStatusCode httpStatusCode, string reasonPhrase ) {
             ContactId = contactId;

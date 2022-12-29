@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ActiveCampaignNetClient {
+namespace ActiveCampaign {
     public class RemoveTagAssociationFromContactException : Exception {
         public RemoveTagAssociationFromContactException( int contactId, int tagId, int tagAssociationId, System.Net.HttpStatusCode httpStatusCode, string httpReasonPhrase ) {
             ContactId = contactId;

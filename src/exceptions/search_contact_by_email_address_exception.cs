@@ -1,11 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Mail;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace ActiveCampaignNetClient {
+﻿namespace ActiveCampaign {
     public class SearchContactByEmailAddressException : Exception {
         public SearchContactByEmailAddressException( string emailAddress, System.Net.HttpStatusCode httpStatusCode, string httpReasonPhrase ) {
             EmailAddress = emailAddress;

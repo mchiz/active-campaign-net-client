@@ -1,8 +1,4 @@
-﻿using ActiveCampaignNetClient;
-using Newtonsoft.Json;
-using System.Net.Mail;
-using System.Threading;
-using System.Xml.XPath;
+﻿using Newtonsoft.Json;
 
 namespace ActiveCampaign {
     public class Client : IDisposable {
@@ -164,71 +160,23 @@ namespace ActiveCampaign {
         }
 
         async Task< HttpResponseMessage > DoGetAsync( string query, CancellationToken cancellationToken = default ) {
-            try {
-                await _semaphore.WaitAsync( );
+            await _activityLimiter.WaitAsync( cancellationToken );
 
-                await WaitForActiveCampaignAccess( cancellationToken );
-
-                var result = await _httpClient.GetAsync( query, cancellationToken );
-
-                _lastAccessTimeStamp = System.DateTime.Now;
-
-                return result;
-
-            } finally {
-                _semaphore.Release( );
-
-            }
+            return await _httpClient.GetAsync( query, cancellationToken );
         }
 
         async Task< HttpResponseMessage > DoPostAsync( string query, string content, CancellationToken cancellationToken = default ) {
-            try {
-                await _semaphore.WaitAsync( );
+            await _activityLimiter.WaitAsync( cancellationToken );
 
-                await WaitForActiveCampaignAccess( cancellationToken );
+            using var c = new StringContent( content );
 
-                using var c = new StringContent( content );
-
-                var result = await _httpClient.PostAsync( query, c, cancellationToken );
-
-                _lastAccessTimeStamp = System.DateTime.Now;
-
-                return result;
-
-            } finally {
-                _semaphore.Release( );
-
-            }
-
+            return await _httpClient.PostAsync( query, c, cancellationToken );
         }
 
         async Task< HttpResponseMessage > DoDeleteAsync( string query, CancellationToken cancellationToken = default ) {
-            try {
-                await _semaphore.WaitAsync( );
+            await _activityLimiter.WaitAsync( cancellationToken );
 
-                await WaitForActiveCampaignAccess( cancellationToken );
-
-                var result = await _httpClient.DeleteAsync( query,cancellationToken );
-
-                _lastAccessTimeStamp = System.DateTime.Now;
-
-                return result;
-
-            } finally {
-                _semaphore.Release( );
-
-            }
-
-        }
-
-        async Task WaitForActiveCampaignAccess( CancellationToken cancellationToken ) {
-            var diff = System.DateTime.Now - _lastAccessTimeStamp;
-
-            if( diff.TotalMilliseconds < _delayBetweenQueries ) {
-                int remaining = _delayBetweenQueries - ( int )diff.TotalMilliseconds;
-                
-                await Task.Delay( remaining, cancellationToken );
-            }
+            return await _httpClient.DeleteAsync( query,cancellationToken );
         }
 
         struct AddContactResponse {
@@ -259,15 +207,11 @@ namespace ActiveCampaign {
             public TagAssociationData [ ]contactTags;
         }
 
-        // ActiveCampaign imposes a limit of 5 requests per second
-        // This is expressed in milliseconds
-        const int _delayBetweenQueries = 1000 / 5 + 1;
-
         HttpClient _httpClient = new HttpClient( );
 
         string _url;
 
-        static System.DateTime _lastAccessTimeStamp;
-        static SemaphoreSlim _semaphore = new SemaphoreSlim( 1 );
+        // ActiveCampaign imposes a limit of 5 requests per second
+        static ConcurrentLimitedTimedAccessResourceGuard _activityLimiter = new ConcurrentLimitedTimedAccessResourceGuard( 5, 1000 );
     }
 }
