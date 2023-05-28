@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.Data;
+using System.Numerics;
 using System.Threading;
 
 namespace ActiveCampaign {
@@ -52,6 +53,23 @@ namespace ActiveCampaign {
                 return new CampaignData[ ] { };
 
             return o;
+        }
+
+        public async Task UpdateContactListStatusAsync( int contactId, int listId, ContactStatus status, CancellationToken cancellationToken = default ) {
+            var contactList = new {
+                sourceid = 0,
+                list = listId,
+                contact = contactId,
+                status = status,
+            };
+
+            string query = _url + "/contactLists";
+            string content = "{ \"contactList\": " + JsonConvert.SerializeObject( contactList ) + "}";
+
+            using var result = await DoPostAsync( query, content, cancellationToken );
+
+            if( !result.IsSuccessStatusCode )
+                throw new UpdateContactListStatusAsync( contactId, listId, status, result.StatusCode, result.ReasonPhrase ?? "" );
         }
 
         public async Task< ListData? > GetListIdAsync( string listName, CancellationToken cancellationToken = default ) {
@@ -111,7 +129,29 @@ namespace ActiveCampaign {
 
             string jsonData = await result.Content.ReadAsStringAsync( cancellationToken );
 
-            var acr = JsonConvert.DeserializeObject< AddContactResponse >( jsonData );
+            var acr = JsonConvert.DeserializeObject< AddOrSyncContactResponse >( jsonData );
+
+            return acr.contact;
+        }
+
+        public async Task< ContactData > SyncContactDataAsync( string emailAddress, ContactInputData data, CancellationToken cancellationToken = default ) {
+            string firstName =   data.FirstName   != null ? $"\"firstName\":\"{data.FirstName}\"{( data.LastName != null ? "," : "" )}" : "";
+            string lastName    = data.LastName    != null ? $"\"lastName\":\"{data.LastName}\"{( data.Phone != null ? "," : "" )}"      : "";
+            string phone       = data.Phone       != null ? $"\"phone\":\"{data.Phone}\"{( data.FieldValues != null ? "," : "" )}"      : "";
+            string fieldValues = data.FieldValues != null ? $"\"fieldValues\":{JsonConvert.SerializeObject( data.FieldValues )}"         : "";
+
+            string content = $"{{ \"contact\": {{ \"email\":\"{emailAddress}\",{firstName}{lastName}{phone}{fieldValues} }} }}";
+
+            string query = _url + "/contact/sync";
+
+            using var result = await DoPostAsync( query, content, cancellationToken );
+
+            if( !result.IsSuccessStatusCode )
+                throw new SyncContactDataException( emailAddress, data, result.StatusCode, result.ReasonPhrase ?? "" );
+
+            string jsonData = await result.Content.ReadAsStringAsync( cancellationToken );
+
+            var acr = JsonConvert.DeserializeObject< AddOrSyncContactResponse >( jsonData );
 
             return acr.contact;
         }
@@ -262,7 +302,7 @@ namespace ActiveCampaign {
             return await _httpClient.DeleteAsync( query,cancellationToken );
         }
 
-        struct AddContactResponse {
+        struct AddOrSyncContactResponse {
             public ContactData contact;
         }
 
