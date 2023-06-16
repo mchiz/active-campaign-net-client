@@ -91,6 +91,32 @@ namespace ActiveCampaign {
             return await RetreiveContactsAsync( null, status, $"&listid={listId}", options, cancellationToken );
         }
 
+        public async Task< TagData[ ] > ListAllTagsAsync( CancellationToken cancellationToken = default ) {
+            TagData [ ]o = null;
+
+            int i = 0;
+
+            do {
+                string query = _url + $"/tags?offset={i}";
+
+                using var result = await DoGetAsync( query, cancellationToken );
+            
+                string jsonData = await result.Content.ReadAsStringAsync( cancellationToken );
+
+                var tdr = JsonConvert.DeserializeObject< TagsDataResponse >( jsonData );
+
+                if( o == null ) o = new TagData[ tdr.meta.total ];
+
+                System.Array.Copy( tdr.tags, 0, o, i, tdr.tags.Length );
+
+                i += tdr.tags.Length;
+
+                if( i == o.Length )
+                    return o;
+
+            } while( true );
+        }
+
         public async Task< TagData? > GetTagIdAsync( string tagName, CancellationToken cancellationToken = default ) {
             string query = _url + "/tags?search=" + Uri.EscapeDataString( tagName );
 
@@ -226,8 +252,8 @@ namespace ActiveCampaign {
             string dateFilter = "";
 
             if( dateRange.HasValue ) {
-                var f = dateRange.Value.Start;
-                var t = dateRange.Value.End;
+                var f = dateRange.Value.Start.ToUniversalTime( );
+                var t = dateRange.Value.End.ToUniversalTime( );
 
                 string dateBefore = $"{t.Year}/{t.Month}/{t.Day}T{t.Hour}:{t.Minute}:{t.Second}-00:00";
                 string dateAfter = $"{f.Year}/{f.Month}/{f.Day}T{f.Hour}:{f.Minute}:{f.Second}-00:00";
