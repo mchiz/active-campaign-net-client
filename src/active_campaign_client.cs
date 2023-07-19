@@ -21,11 +21,6 @@ namespace ActiveCampaign {
 
             int processedCampaignsCount = 0;
 
-            var settings = new JsonSerializerSettings {
-                NullValueHandling = NullValueHandling.Ignore,
-                MissingMemberHandling = MissingMemberHandling.Ignore
-            };
-
             do {
                 string query = _url + $"/campaigns/?limit=100&offset={processedCampaignsCount}";
 
@@ -33,7 +28,7 @@ namespace ActiveCampaign {
             
                 string jsonData = await result.Content.ReadAsStringAsync( cancellationToken );
 
-                var cdr = JsonConvert.DeserializeObject< GetCampaignsDataResponse >( jsonData, settings );
+                var cdr = JsonConvert.DeserializeObject< GetCampaignsDataResponse >( jsonData, _newtownSoftIgnoreNullValuesSettings );
 
                 if( o == null )
                     o = new CampaignData[ cdr.meta.total ];
@@ -53,6 +48,20 @@ namespace ActiveCampaign {
                 return new CampaignData[ ] { };
 
             return o;
+        }
+
+        public async Task< ContactListStatus[ ] > GetContactListsStatusAsync( int contactId, CancellationToken cancellationToken ) {
+            string query = _url + $"/contacts/{contactId}/contactLists";
+
+            using var result = await DoGetAsync( query, cancellationToken );
+            
+            result.EnsureSuccessStatusCode( );
+
+            string jsonData = await result.Content.ReadAsStringAsync( cancellationToken );
+
+            var ldr = JsonConvert.DeserializeObject< ContactListStatusResponse >( jsonData, _newtownSoftIgnoreNullValuesSettings );
+
+            return ldr.contactLists;
         }
 
         public async Task UpdateContactListStatusAsync( int contactId, int listId, ContactStatus status, CancellationToken cancellationToken = default ) {
@@ -360,6 +369,10 @@ namespace ActiveCampaign {
             public Meta meta;
         }
 
+        struct ContactListStatusResponse {
+            public ContactListStatus [ ] contactLists; 
+        }
+
         struct GetContactTagsDataResponse {
             public struct TagAssociationData {
                 public int contact;
@@ -382,6 +395,11 @@ namespace ActiveCampaign {
         HttpClient _httpClient = new HttpClient( );
 
         string _url;
+
+        readonly JsonSerializerSettings _newtownSoftIgnoreNullValuesSettings = new JsonSerializerSettings {
+            NullValueHandling = NullValueHandling.Ignore,
+            MissingMemberHandling = MissingMemberHandling.Ignore
+        };
 
         // ActiveCampaign imposes a limit of 5 requests per second
         static ConcurrentLimitedTimedAccessResourceGuard _activityLimiter = new ConcurrentLimitedTimedAccessResourceGuard( 5, 1000 );

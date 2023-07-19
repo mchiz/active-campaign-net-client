@@ -15,7 +15,7 @@ namespace ActiveCampaign {
         [ JsonProperty( "send_amt" ) ] public int SendAmt;
         [ JsonProperty( "total_amt" ) ] public int TotalAmt;
         [ JsonProperty( "opens" ) ] public int Opens;
-        [ JsonProperty( "unique_opens" ) ] public int UniqueOpens;
+        [ JsonProperty( "uniqueopens" ) ] public int UniqueOpens;
         [ JsonProperty( "linkclicks" ) ] public int LinkClicks;
         [ JsonProperty( "uniquelinkclicks" ) ] public int UniqueLinkClicks;
         [ JsonProperty( "subscriberclicks" ) ] public int SubscriberClicks;
