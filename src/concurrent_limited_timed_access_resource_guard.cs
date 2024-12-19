@@ -22,7 +22,7 @@ namespace ActiveCampaign {
                     if( milliseconds < _accessLifeTimeMilliseconds ) {
                         int remaining = _accessLifeTimeMilliseconds - ( int )milliseconds;
 
-                        await Task.Delay( remaining );
+                        await Task.Delay( remaining, cancellationToken );
                     }
 
                     RemoveOldestTimeStamp( );
